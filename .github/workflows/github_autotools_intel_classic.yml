@@ -65,7 +65,7 @@ jobs:
         wget https://github.com/yaml/libyaml/releases/download/0.2.5/yaml-0.2.5.tar.gz
         tar xf yaml-0.2.5.tar.gz && cd yaml-0.2.5
         ./configure --prefix=/libs
-        sudo make -j install && cd
+        sudo make -j install
       env:
         CC: /opt/intel/oneapi/compiler/2023.2.1/linux/bin/intel64/icc
         FCC: /opt/intel/oneapi/compiler/2023.2.1/linux/bin/intel64/ifort
