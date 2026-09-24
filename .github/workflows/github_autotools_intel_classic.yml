@@ -52,8 +52,14 @@ jobs:
       name: Build netcdf
       run: |
         set -eux
-        export LD_LIBRARY_PATH="/libs/lib:$LD_LIBRARY_PATH"
-        sudo mkdir /libs
+        sudo mkdir -p /libs
+        sudo chown -R $USER:$USER /libs
+        export PATH="/libs/bin:$PATH"
+        export LD_LIBRARY_PATH="/libs/lib:${LD_LIBRARY_PATH:-}"
+        export CPPFLAGS="-I/libs/include"
+        export CFLAGS="-I/libs/include"
+        export FCFLAGS="-I/libs/include"
+        export LDFLAGS="-L/libs/lib -Wl,-rpath,/libs/lib"
         wget https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.6/hdf5-1.14.6.tar.gz
         tar xf hdf5-1.14.6.tar.gz && cd hdf5-1.14.6
         ./configure --prefix=/libs
@@ -69,9 +75,6 @@ jobs:
         ./configure --prefix=/libs
         sudo make -j install
         cd /home/runner/work/FMS/FMS && sudo rm -rf *
-      env:
-        CC: /opt/intel/oneapi/compiler/2023.2.1/linux/bin/intel64/icc
-        FC: /opt/intel/oneapi/compiler/2023.2.1/linux/bin/intel64/ifort
     - name: checkout
       uses: actions/checkout@v4.2.2
     - name: Configure
