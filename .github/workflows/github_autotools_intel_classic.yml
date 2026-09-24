@@ -14,21 +14,22 @@ jobs:
   intel-autotools:
     runs-on: ubuntu-latest
     env:
-      CC: /opt/intel/oneapi/mpi/2021.10.0/bin/mpiicc
-      FC: /opt/intel/oneapi/mpi/2021.10.0/bin/mpiifort
+      CC: mpiicc
+      FC: mpiifort
       CFLAGS:  "-I/libs/include"
       FCFLAGS: "-I/libs/include -g -traceback"
-      LDFLAGS: "-L/libs/lib"
+      LDFLAGS: "-L/libs/lib -Wl,-rpath,/libs/lib"
+      LD_LIBRARY_PATH: "/libs/lib"
       TEST_VERBOSE: 1
-      I_MPI_FABRICS: "shm" # needed for mpi in image
+      I_MPI_FABRICS: shm # needed for mpi in image
     steps:
     - name: Cache dependencies
       id: cache
       uses: actions/cache@v4.2.0
       with:
         path: /libs
-        key: intel-libs
-    - name: Install Intel compilers & MPI
+        key: intel-classic-ubuntu22-hdf5-1.14.6-netcdf-4.8.1-yaml-0.2.5-v1
+    - name: Install Intel Classic compilers & MPI
       uses: NOAA-EMC/ci-install-intel-toolkit@develop
       with:
         install-classic: true
@@ -37,15 +38,19 @@ jobs:
         mpi-wrapper-setup: classic
     - name: Debug Intel compiler environment
       run: |
+        set -eux
         echo "PATH=$PATH"
         echo "CC=$CC"
         echo "FC=$FC"
-        which mpiicc || true
-        which mpiifort || true
-        which icc || true
-        which ifort || true
-        mpiicc --version || true
-        mpiifort --version || true
+        command -v mpiicc
+        command -v mpiifort
+        command -v icc
+        command -v ifort
+        mpiicc -show
+        mpiifort -show
+        icc --version
+        ifort --version
+        
     - name: Install packages for building
       run: sudo apt-get update && sudo apt-get install -y autoconf libtool automake zlib1g-dev
     - if: steps.cache.outputs.cache-hit != 'true'
@@ -60,17 +65,27 @@ jobs:
         export CFLAGS="-I/libs/include"
         export FCFLAGS="-I/libs/include"
         export LDFLAGS="-L/libs/lib -Wl,-rpath,/libs/lib"
-        export LIBS="-lhdf5 -lz -ldl -lm"
         wget https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.6/hdf5-1.14.6.tar.gz
         tar xf hdf5-1.14.6.tar.gz && cd hdf5-1.14.6
-        ./configure --prefix=/libs --enable-shared --enable-hl
+        CC="$CC" \
+        CFLAGS="$CFLAGS" \
+        CPPFLAGS="$CPPFLAGS" \
+        LDFLAGS="$LDFLAGS" \
+        ./configure \
+          --prefix=/libs \
+          --enable-shared \
+          --enable-hl
         sudo make -j install && cd ..
         wget https://github.com/Unidata/netcdf-c/archive/refs/tags/v4.8.1.tar.gz
         tar xf v4.8.1.tar.gz && cd netcdf-c-4.8.1
-        ./configure --enable-remote-fortran-bootstrap --prefix=/libs
+        CC="$CC" \
+        FC="$FC" \
         CPPFLAGS="-I/libs/include" \
+        CFLAGS="-I/libs/include" \
+        FCFLAGS="-I/libs/include" \
         LDFLAGS="-L/libs/lib -Wl,-rpath,/libs/lib" \
-        LIBS="-lhdf5_hl -lhdf5 -lz -ldl -lm"
+        LIBS="-lhdf5_hl -lhdf5 -lz -ldl -lm" \
+        ./configure --enable-remote-fortran-bootstrap --prefix=/libs
         sudo make -j install
         sudo make -j -k build-netcdf-fortran
         sudo make -j install-netcdf-fortran
@@ -84,7 +99,8 @@ jobs:
     - name: Configure
       run: |
         set -eux
-        export LD_LIBRARY_PATH="/libs/lib:/opt/intel/oneapi/compiler/2023.2.1/linux/compiler/lib/intel64_lin:${LD_LIBRARY_PATH}"
+        export PATH="/libs/bin:$PATH"
+        export LD_LIBRARY_PATH="/libs/lib:${LD_LIBRARY_PATH:-}"
         export CPPFLAGS="-I/libs/include"
         export CFLAGS="-I/libs/include"
         export FCFLAGS="-I/libs/include -g -traceback"
@@ -95,10 +111,12 @@ jobs:
     - name: Compile
       run:
         set -eux
-        export LD_LIBRARY_PATH="/libs/lib:/opt/intel/oneapi/compiler/2023.2.1/linux/compiler/lib/intel64_lin:${LD_LIBRARY_PATH}"
+        export PATH="/libs/bin:$PATH"
+        export LD_LIBRARY_PATH="/libs/lib:${LD_LIBRARY_PATH:-}" 
         make -j || make
     - name: Run test suite
       run:
         set -eux
-        export LD_LIBRARY_PATH="/libs/lib:/opt/intel/oneapi/compiler/2023.2.1/linux/compiler/lib/intel64_lin:${LD_LIBRARY_PATH}"
+        export PATH="/libs/bin:$PATH"
+        export LD_LIBRARY_PATH="/libs/lib:${LD_LIBRARY_PATH:-}"
         make check TEST_VERBOSE=1
